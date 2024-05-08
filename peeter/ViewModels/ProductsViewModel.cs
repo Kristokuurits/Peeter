@@ -1,4 +1,5 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using System;
 using peeter.Data;
 using System.Collections.Generic;
@@ -67,5 +68,51 @@ namespace peeter.ViewModels
                 BusyText = "Processing...";
             }
         }
+
+        [RelayCommand]
+        private void SetOperatingProduct(Product? product) => OperatingProduct = product ?? new();
+
+        [RelayCommand]
+        private async Task SaveProductAsync()
+        {
+            if (OperatingProduct == null)
+                return;
+
+            var (IsValid, errorMessage) = OperatingProduct.Validate();
+            if (IsValid) 
+            {
+                await Shell.Current.DisplayAlert("Validation Error", errorMessage, "Ok");
+                return;
+            }
+
+            var busyText = OperatingProduct.Id == 0 ? "Creating product..." : "Updating product...";
+            await ExecuteAsync(async () =>
+            {
+                if (OperatingProduct.Id == 0)
+                {
+                    await _context.AddItemAsync<Product>(OperatingProduct);
+                    Products.Add(OperatingProduct);
+                }
+                else
+                {
+                    if (await _context.UpdateItemAsync<Product>(OperatingProduct))
+                    {
+                        var productCopy = OperatingProduct.Clone();
+
+                        var index = Products.IndexOf(productCopy);
+                        Products.RemoveAt(index);
+
+                        Products.Insert(index, productCopy);
+                    }
+                    else
+                    {
+                        await Shell.Current.DisplayAlert("Error", "Product updating error", "Ok");
+                        return;
+                    }
+                }
+                SetOperatingProductCommand.Execute(new());
+            }, busyText);
+        }
+
     }
 }
